@@ -1,0 +1,39 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    image: nanbingjun/top10-volume-tracker-worker:latest
+    container_name: top10-volume-tracker-worker
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DB_PATH=/app/data/tracker.db
+
+  webui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.webui
+    image: nanbingjun/top10-volume-tracker-webui:latest
+    container_name: top10-volume-tracker-webui
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PORT=8003
+      - DB_PATH=/app/data/tracker.db
+    depends_on:
+      - worker
+    healthcheck:
+      test: ["CMD-SHELL", "deno eval \"const res = await fetch('http://localhost:8003/health'); if (!res.ok) Deno.exit(1);\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

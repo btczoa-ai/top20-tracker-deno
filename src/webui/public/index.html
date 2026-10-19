@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto TOP 10 Volume Tracker | 過去24H取引量TOP10 平均値トラッカー</title>
+  <meta name="description" content="暗号資産取引量TOP10銘柄の1時間ごと平均取引量および市場モメンタムを可視化するトラッカーダッシュボード">
+  <meta name="theme-color" content="#0b0e14">
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-branding">
+        <div class="brand-badge">
+          <span class="live-pulse"></span>
+          <span class="badge-text">LIVE MONITOR</span>
+        </div>
+        <div class="title-group">
+          <h1 class="app-title">Crypto TOP 10 Volume Tracker</h1>
+          <p class="app-subtitle">過去24H取引量 TOP10 通貨の1時間ごと平均取引量推移トラッカー (JST)</p>
+        </div>
+      </div>
+
+      <!-- Controls & Actions -->
+      <div class="header-controls">
+        <!-- Timeframe selector -->
+        <div class="timeframe-selector" role="group" aria-label="Timeframe selection">
+          <button type="button" class="btn-timeframe active" data-timeframe="24h">24 Hours</button>
+          <button type="button" class="btn-timeframe" data-timeframe="7d">7 Days</button>
+          <button type="button" class="btn-timeframe" data-timeframe="all">All Data</button>
+        </div>
+
+        <!-- Auto-refresh & Manual refresh -->
+        <div class="action-buttons">
+          <label class="toggle-switch" title="60秒ごとの自動更新を切り替え">
+            <input type="checkbox" id="autoRefreshToggle" checked>
+            <span class="slider"></span>
+            <span class="toggle-label">Auto <span id="refreshTimerCountdown">60s</span></span>
+          </label>
+
+          <button type="button" id="refreshBtn" class="btn-primary" title="今すぐデータを最新に更新">
+            <svg class="icon-refresh" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+            </svg>
+            <span class="btn-text">Refresh</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stat Cards Overview -->
+    <section class="stats-grid" aria-label="Key Statistics">
+      <!-- Card 1: Latest Average Volume -->
+      <article class="stat-card" id="cardAvgVolume">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <span class="card-title">最新 TOP10 平均取引量</span>
+        </div>
+        <div class="card-value-group">
+          <span class="card-value" id="statAvgVolume">--</span>
+          <span class="card-change" id="statAvgVolumeChange">--</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-caption">TOP10通貨の1銘柄あたり平均 (24h取引量)</span>
+        </div>
+      </article>
+
+      <!-- Card 2: Latest Total Volume -->
+      <article class="stat-card" id="cardTotalVolume">
+        <div class="card-header">
+          <span class="card-icon">💰</span>
+          <span class="card-title">最新 TOP10 合計取引量</span>
+        </div>
+        <div class="card-value-group">
+          <span class="card-value" id="statTotalVolume">--</span>
+          <span class="card-change" id="statTotalVolumeChange">--</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-caption">TOP10通貨の総計 24h取引高</span>
+        </div>
+      </article>
+
+      <!-- Card 3: Price Momentum (Gainers vs Losers) -->
+      <article class="stat-card" id="cardMomentum">
+        <div class="card-header">
+          <span class="card-icon">⚡</span>
+          <span class="card-title">価格モメンタム (24h変動)</span>
+        </div>
+        <div class="card-value-group momentum-group">
+          <div class="momentum-badge gainer">
+            <span class="dot gainer"></span>
+            <span class="label">上昇:</span>
+            <span class="count" id="statGainers">--</span>
+          </div>
+          <div class="momentum-badge loser">
+            <span class="dot loser"></span>
+            <span class="label">下落:</span>
+            <span class="count" id="statLosers">--</span>
+          </div>
+        </div>
+        <!-- Ratio progress bar -->
+        <div class="momentum-bar-container">
+          <div class="momentum-bar-fill" id="statMomentumBar" style="width: 50%;"></div>
+        </div>
+        <div class="card-footer">
+          <span class="card-caption" id="statMomentumCaption">TOP10通貨の上昇・下落比率</span>
+        </div>
+      </article>
+
+      <!-- Card 4: Last Updated Time -->
+      <article class="stat-card" id="cardLastUpdated">
+        <div class="card-header">
+          <span class="card-icon">🕒</span>
+          <span class="card-title">最終更新日時 (JST)</span>
+        </div>
+        <div class="card-value-group">
+          <span class="card-value time-value" id="statLastUpdated">--</span>
+        </div>
+        <div class="card-footer">
+          <span class="card-caption" id="statTimeAgo">データ待機中...</span>
+        </div>
+      </article>
+    </section>
+
+    <!-- Main Chart Section: Only Historical Line Chart -->
+    <main class="chart-section" aria-label="Historical Volume Chart">
+      <div class="chart-header">
+        <div class="chart-title-wrap">
+          <h2 class="chart-title">TOP10通貨 取引量平均値 推移チャート</h2>
+          <span class="chart-tag">1時間足 (Hourly Intervals)</span>
+        </div>
+        <div class="chart-legend-indicator">
+          <div class="legend-item">
+            <span class="legend-line"></span>
+            <span class="legend-label">TOP10 平均取引量</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-line legend-line-avg"></span>
+            <span class="legend-label legend-label-avg">TOP10 期間平均</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart Canvas Container -->
+      <div class="chart-container" id="chartContainer">
+        <canvas id="volumeChart"></canvas>
+
+        <!-- Loading State Overlay -->
+        <div class="overlay-state loading-overlay" id="loadingOverlay">
+          <div class="spinner"></div>
+          <p class="overlay-text">データを読み込み中...</p>
+        </div>
+
+        <!-- Error State Overlay -->
+        <div class="overlay-state error-overlay" id="errorOverlay" style="display: none;">
+          <div class="error-icon">⚠️</div>
+          <p class="overlay-text error-msg" id="errorMessage">データ取得に失敗しました</p>
+          <button type="button" class="btn-retry" id="retryBtn">再試行</button>
+        </div>
+
+        <!-- Empty State Overlay -->
+        <div class="overlay-state empty-overlay" id="emptyOverlay" style="display: none;">
+          <div class="empty-icon">📭</div>
+          <p class="overlay-text">表示可能な履歴データがまだありません。<br>次回の1時間集計までお待ちください。</p>
+        </div>
+      </div>
+    </main>
+
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-status">
+        <span class="status-indicator online" id="connectionStatusIndicator"></span>
+        <span id="connectionStatusText">API 接続中</span>
+      </div>
+      <div class="footer-info">
+        <span>タイムゾーン: Asia/Tokyo (JST)</span>
+        <span class="divider">|</span>
+        <span>Hyperliquid DEX Market Data</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

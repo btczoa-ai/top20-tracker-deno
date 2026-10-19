@@ -1,0 +1,14 @@
+# Environment
+.env
+!.env.example
+
+# SQLite Data directory
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Cache / Temp
+.cache/
+tmp/
