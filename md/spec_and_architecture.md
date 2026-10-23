@@ -76,7 +76,11 @@ CREATE TABLE IF NOT EXISTS records (
   total_volume REAL NOT NULL,
   average_volume REAL NOT NULL,
   up_count INTEGER NOT NULL,
-  down_count INTEGER NOT NULL
+  down_count INTEGER NOT NULL,
+  up_volume REAL NOT NULL DEFAULT 0,
+  down_volume REAL NOT NULL DEFAULT 0,
+  all_up_volume REAL NOT NULL DEFAULT 0,
+  all_down_volume REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_records_timestamp ON records(timestamp);
 ```
@@ -99,6 +103,14 @@ CREATE INDEX IF NOT EXISTS idx_records_timestamp ON records(timestamp);
 - **X軸**: JST時刻（`MM/DD HH:mm`）。
 - **Y軸**: 米ドル表記（`$123.45M`, `$1.23B` などコンパクト表記）。
 - **ツールチップ**: 日時、平均取引量、合計取引量、上昇/下落通貨数を表示。
+
+### 全銘柄 上昇 ÷ 下落コイン 取引量チャート
+- **対象指標**: 1時間ごとの全銘柄 (TOP10に限らない、上場廃止銘柄を除き24h取引量が正の銘柄) の上昇コイン取引量合計 (`all_up_volume`) ÷ 下落コイン取引量合計 (`all_down_volume`) の倍率 (1本線)。
+- **収集**: worker が `metaAndAssetCtxs` の全銘柄から、`markPx > prevDayPx` を上昇、`markPx < prevDayPx` を下落として毎時集計する (TOP10分の `up_volume` / `down_volume` も従来どおり記録)。
+- **過去データ**: 全銘柄分は収集処理の更新後から蓄積される。それ以前の行 (0) はチャートから除外し、遡及はできない。
+- **下落0の扱い**: 下落合計が0の時点は除算できないため欠測 (線を途切れさせる)。
+- **Y軸**: 倍率 (`0倍` 〜)。
+- **ツールチップ**: 日時、倍率、上昇/下落それぞれの取引量 (コンパクト表記)。
 
 ---
 

@@ -49,6 +49,10 @@ export class TrackerService {
         average_volume: aggregation.averageVolume,
         up_count: aggregation.upCount,
         down_count: aggregation.downCount,
+        up_volume: aggregation.upVolume,
+        down_volume: aggregation.downVolume,
+        all_up_volume: aggregation.allUpVolume,
+        all_down_volume: aggregation.allDownVolume,
       });
 
       logger.info(

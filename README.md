@@ -11,6 +11,7 @@
    - 毎時00分（正時）の切り替えタイミングで自動的に最新の取引量データを再取得・登録。
    - 過去24H取引量（`dayNtlVlm`）上位10通貨の「合計取引量 (`total_volume`)」と「平均取引量 (`average_volume`)」を算出。
    - TOP10通貨のうち価格上昇した通貨数 (`up_count`) および下落した通貨数 (`down_count`) を同時に集計・登録。
+   - 上昇通貨・下落通貨それぞれの24h取引量合計を、TOP10分 (`up_volume` / `down_volume`) と全銘柄分 (`all_up_volume` / `all_down_volume`) で記録。WebUI では1時間ごとの「全銘柄の上昇コイン取引量 ÷ 下落コイン取引量」(倍率) を1本線チャートで表示 (全銘柄分は収集処理の更新後の記録から表示され、過去分は遡れない)。
    - ※データベースには通貨名一覧は保存せず、軽量な数値集約メトリクスのみを永続化（高速・軽量）。
 
 2. **Web UI & 過去線チャート（単一ライン表示）**:
@@ -183,6 +184,10 @@ docker compose down
 | `average_volume` | `REAL NOT NULL` | TOP10通貨の24時間取引量 平均値 ($ USD) |
 | `up_count` | `INTEGER NOT NULL` | TOP10通貨のうち前日比価格上昇した通貨数 |
 | `down_count` | `INTEGER NOT NULL` | TOP10通貨のうち前日比価格下落した通貨数 |
+| `up_volume` | `REAL NOT NULL DEFAULT 0` | 上昇通貨の24h取引量合計 (USD)。旧データは 0 |
+| `down_volume` | `REAL NOT NULL DEFAULT 0` | 下落通貨の24h取引量合計 (USD)。旧データは 0 |
+| `all_up_volume` | `REAL NOT NULL DEFAULT 0` | 全銘柄 (TOP10に限らない) の上昇銘柄の24h取引量合計 (USD)。旧データは 0 |
+| `all_down_volume` | `REAL NOT NULL DEFAULT 0` | 全銘柄の下落銘柄の24h取引量合計 (USD)。旧データは 0 |
 
 ---
 

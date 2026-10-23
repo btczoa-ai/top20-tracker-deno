@@ -106,6 +106,13 @@ export class HyperliquidAdapter {
       const averageVolume = topCoins.length > 0 ? totalVolume / topCoins.length : 0;
       const upCount = topCoins.filter((item) => item.isUp).length;
       const downCount = topCoins.filter((item) => item.isDown).length;
+      // 上昇・下落銘柄ごとの取引量合計 (変動なし銘柄はどちらにも含めない)
+      const sumVolume = (coins: TopCoinInfo[]) => coins.reduce((sum, item) => sum + item.volume, 0);
+      const upVolume = sumVolume(topCoins.filter((item) => item.isUp));
+      const downVolume = sumVolume(topCoins.filter((item) => item.isDown));
+      // 全銘柄 (TOP10に限らない) の上昇・下落銘柄ごとの取引量合計
+      const allUpVolume = sumVolume(parsedCoins.filter((item) => item.isUp));
+      const allDownVolume = sumVolume(parsedCoins.filter((item) => item.isDown));
 
       logger.info(
         `Top ${topCoins.length} aggregated: Total Volume=$${Math.round(totalVolume).toLocaleString()}, Up=${upCount}, Down=${downCount}`,
@@ -116,6 +123,10 @@ export class HyperliquidAdapter {
         averageVolume,
         upCount,
         downCount,
+        upVolume,
+        downVolume,
+        allUpVolume,
+        allDownVolume,
         top10Count: topCoins.length,
         topCoins,
         timestamp: Date.now(),

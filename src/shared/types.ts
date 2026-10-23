@@ -14,6 +14,10 @@ export interface TrackerRecord {
   average_volume: number; // Average 24h volume across TOP 10 coins (USD)
   up_count: number;       // Number of coins where markPx > prevDayPx
   down_count: number;     // Number of coins where markPx < prevDayPx
+  up_volume: number;      // 上昇銘柄の24h取引量合計 (USD)
+  down_volume: number;    // 下落銘柄の24h取引量合計 (USD)
+  all_up_volume: number;   // 全銘柄 (TOP10に限らない) の上昇銘柄の24h取引量合計 (USD)
+  all_down_volume: number; // 全銘柄 (TOP10に限らない) の下落銘柄の24h取引量合計 (USD)
 }
 
 /**
@@ -42,6 +46,10 @@ export interface Top10Aggregation {
   averageVolume: number;
   upCount: number;
   downCount: number;
+  upVolume: number;       // 上昇銘柄の24h取引量合計 (USD)
+  downVolume: number;     // 下落銘柄の24h取引量合計 (USD)
+  allUpVolume: number;    // 全銘柄の上昇銘柄の24h取引量合計 (USD)
+  allDownVolume: number;  // 全銘柄の下落銘柄の24h取引量合計 (USD)
   top10Count: number;
   topCoins: TopCoinInfo[];
   timestamp: number;

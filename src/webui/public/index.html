@@ -23,8 +23,10 @@
     <!-- Top Header -->
     <header class="app-header">
       <div class="header-branding">
+        <div class="brand-icon" aria-hidden="true">📊</div>
         <div class="title-group">
           <h1 class="app-title">Crypto TOP 10 Volume Tracker</h1>
+          <span class="header-divider" aria-hidden="true">|</span>
           <p class="app-subtitle">過去24H取引量 TOP10 通貨の1時間ごと平均取引量推移トラッカー (JST)</p>
         </div>
       </div>
@@ -173,6 +175,23 @@
         </div>
       </div>
     </main>
+
+    <!-- 上昇÷下落コイン取引量チャート -->
+    <section class="chart-section" aria-label="Up/Down Volume Chart">
+      <div class="chart-header">
+        <div class="chart-title-wrap">
+          <h2 class="chart-title">全銘柄 上昇 ÷ 下落コイン 取引量 推移チャート</h2>
+          <span class="chart-tag">1時間足 (全銘柄の上昇コイン取引量合計 ÷ 下落コイン取引量合計)</span>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="upDownChart"></canvas>
+        <div class="overlay-state empty-overlay" id="upDownEmptyOverlay" style="display: none;">
+          <div class="empty-icon">📭</div>
+          <p class="overlay-text">全銘柄の上昇/下落別取引量データがまだありません。<br>次回の1時間集計までお待ちください。</p>
+        </div>
+      </div>
+    </section>
 
 
     <!-- Footer -->

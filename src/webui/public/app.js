@@ -21,6 +21,7 @@
     countdownTimerId: null,
     isLoading: false,
     chart: null,
+    upDownChart: null,
     latestData: null,
     historyData: [],
     lastFetchTime: null
@@ -52,6 +53,8 @@
 
     // Chart & Overlays
     chartCanvas: document.getElementById('volumeChart'),
+    upDownChartCanvas: document.getElementById('upDownChart'),
+    upDownEmptyOverlay: document.getElementById('upDownEmptyOverlay'),
     loadingOverlay: document.getElementById('loadingOverlay'),
     errorOverlay: document.getElementById('errorOverlay'),
     errorMessage: document.getElementById('errorMessage'),
@@ -205,6 +208,10 @@
       item.losers ??
       0
     );
+    const upVolume = Number(item.up_volume ?? item.upVolume ?? 0);
+    const downVolume = Number(item.down_volume ?? item.downVolume ?? 0);
+    const allUpVolume = Number(item.all_up_volume ?? item.allUpVolume ?? 0);
+    const allDownVolume = Number(item.all_down_volume ?? item.allDownVolume ?? 0);
     const top10 = Array.isArray(item.top10 ?? item.coins ?? item.tokens) ? (item.top10 ?? item.coins ?? item.tokens) : [];
 
     return {
@@ -213,6 +220,10 @@
       totalVolume,
       gainersCount,
       losersCount,
+      upVolume,
+      downVolume,
+      allUpVolume,
+      allDownVolume,
       top10
     };
   }
@@ -595,6 +606,7 @@
       // Update UI components
       updateStatCards(normalizedLatest, previousItem);
       renderChart(filteredHistory);
+      renderUpDownChart(filteredHistory);
 
 
       // Update connection status
@@ -625,6 +637,114 @@
     const filtered = history.filter(item => item.timestamp >= cutoff);
     // If filtering eliminates all items but history has entries, return all
     return filtered.length > 0 ? filtered : history;
+  }
+
+  /* ==========================================================================
+     上昇/下落コイン取引量チャート (1時間ごとの折れ線チャート)
+     ========================================================================== */
+
+  /**
+   * 全銘柄の上昇コイン取引量合計 ÷ 下落コイン取引量合計 (倍率) の推移を1本の折れ線で描画する。
+   * 全銘柄分が未記録 (0) の旧データの時点は除外する。
+   * 下落側が0の時点は除算できないため欠測 (線を途切れさせる) とする。
+   */
+  function renderUpDownChart(history) {
+    const ctx = elements.upDownChartCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const sorted = [...(history || [])]
+      .filter(item => item.allUpVolume + item.allDownVolume > 0)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (sorted.length === 0) {
+      if (state.upDownChart) {
+        state.upDownChart.destroy();
+        state.upDownChart = null;
+      }
+      elements.upDownEmptyOverlay.style.display = 'flex';
+      return;
+    }
+    elements.upDownEmptyOverlay.style.display = 'none';
+
+    const labels = sorted.map(item => formatJST(item.timestamp, 'chart'));
+    // 倍率は小数第2位で丸める。下落0の時点は null (欠測)
+    const ratioData = sorted.map(item =>
+      item.allDownVolume > 0 ? Math.round((item.allUpVolume / item.allDownVolume) * 100) / 100 : null
+    );
+
+    if (state.upDownChart) {
+      state.upDownChart.data.labels = labels;
+      state.upDownChart.data.datasets[0].data = ratioData;
+      state.upDownChart.$sorted = sorted;
+      state.upDownChart.update('none');
+      return;
+    }
+
+    const tickFont = { family: 'JetBrains Mono, monospace', size: 11 };
+    const color = '#38bdf8';
+
+    state.upDownChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '全銘柄 上昇 ÷ 下落 取引量',
+          data: ratioData,
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 2.5,
+          tension: 0.35,
+          cubicInterpolationMode: 'monotone',
+          spanGaps: false,
+          pointRadius: sorted.length > 50 ? 0 : 3,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15, 20, 31, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#94a3b8',
+            borderColor: '#233044',
+            borderWidth: 1,
+            padding: 12,
+            callbacks: {
+              title: (context) => {
+                const raw = state.upDownChart.$sorted[context[0]?.dataIndex];
+                return raw ? formatJST(raw.timestamp, 'full') : (context[0]?.label || '');
+              },
+              label: (context) => {
+                // 倍率に加え、元の上昇/下落取引量も併記する
+                const raw = state.upDownChart.$sorted[context.dataIndex];
+                const detail = raw
+                  ? ` (上昇 ${formatCurrencyCompact(raw.allUpVolume, 0)} / 下落 ${formatCurrencyCompact(raw.allDownVolume, 0)})`
+                  : '';
+                return ` 全銘柄 上昇 ÷ 下落: ${context.parsed.y.toFixed(2)} 倍${detail}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+            ticks: { color: '#64748b', font: tickFont, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+          },
+          y: {
+            position: 'right',
+            beginAtZero: true,
+            grid: { color: 'rgba(255, 255, 255, 0.06)' },
+            ticks: { color: '#94a3b8', font: tickFont, callback: (v) => `${v}倍` }
+          }
+        }
+      }
+    });
+    state.upDownChart.$sorted = sorted;
   }
 
   /* ==========================================================================

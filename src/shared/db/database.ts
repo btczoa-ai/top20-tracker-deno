@@ -55,10 +55,31 @@ export class TrackerDatabase {
         total_volume REAL NOT NULL,
         average_volume REAL NOT NULL,
         up_count INTEGER NOT NULL,
-        down_count INTEGER NOT NULL
+        down_count INTEGER NOT NULL,
+        up_volume REAL NOT NULL DEFAULT 0,
+        down_volume REAL NOT NULL DEFAULT 0,
+        all_up_volume REAL NOT NULL DEFAULT 0,
+        all_down_volume REAL NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_records_timestamp ON ${DB_TABLE_RECORDS} (timestamp);
     `);
+    this.migrateVolumeSplitColumns();
+  }
+
+  /**
+   * 既存DBに上昇/下落別取引量カラム (TOP10分・全銘柄分) が無い場合に追加する (既存行は 0)
+   */
+  private migrateVolumeSplitColumns(): void {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(${DB_TABLE_RECORDS})`)
+      .all<{ name: string }>()
+      .map((col) => col.name);
+    for (const name of ['up_volume', 'down_volume', 'all_up_volume', 'all_down_volume']) {
+      if (!columns.includes(name)) {
+        this.db.exec(`ALTER TABLE ${DB_TABLE_RECORDS} ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
+        logger.info(`カラム ${name} を追加しました`);
+      }
+    }
   }
 
   /**
@@ -72,8 +93,12 @@ export class TrackerDatabase {
         total_volume,
         average_volume,
         up_count,
-        down_count
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        down_count,
+        up_volume,
+        down_volume,
+        all_up_volume,
+        all_down_volume
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -83,6 +108,10 @@ export class TrackerDatabase {
       record.average_volume,
       record.up_count,
       record.down_count,
+      record.up_volume,
+      record.down_volume,
+      record.all_up_volume,
+      record.all_down_volume,
     );
 
     const insertedId = Number(this.db.lastInsertRowId);
@@ -111,7 +140,11 @@ export class TrackerDatabase {
         total_volume,
         average_volume,
         up_count,
-        down_count
+        down_count,
+        up_volume,
+        down_volume,
+        all_up_volume,
+        all_down_volume
       FROM ${DB_TABLE_RECORDS}
       ORDER BY timestamp ${sortOrder}
       LIMIT ?
@@ -133,7 +166,11 @@ export class TrackerDatabase {
         total_volume,
         average_volume,
         up_count,
-        down_count
+        down_count,
+        up_volume,
+        down_volume,
+        all_up_volume,
+        all_down_volume
       FROM ${DB_TABLE_RECORDS}
       ORDER BY timestamp DESC
       LIMIT 1
