@@ -1,6 +1,11 @@
-# Environment
+# Environment & Secrets
 .env
+.env.*
 !.env.example
+*.pem
+*.key
+kaggle.json
+kaggle/
 
 # SQLite Data directory
 data/

@@ -1,4 +1,4 @@
-FROM denoland/deno:alpine-2.1.9
+FROM denoland/deno:alpine-2.9.5
 
 WORKDIR /app
 
@@ -16,4 +16,4 @@ RUN mkdir -p /app/data /app/.cache/deno && \
 
 USER deno
 
-CMD ["run", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "--allow-ffi", "src/worker/main.ts"]
+CMD ["run", "--unstable-kv", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "src/worker/main.ts"]

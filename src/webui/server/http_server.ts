@@ -1,6 +1,6 @@
 /**
- * Top10 Volume Tracker: HTTP Server & REST API
- * Serves dashboard static assets from src/public and provides RESTful endpoints.
+ * Top20 Volume Tracker: HTTP Server & REST API
+ * Serves dashboard static assets from src/webui/public and provides RESTful endpoints reading from Deno KV.
  */
 
 import { DEFAULT_PORT } from '../../shared/constants.ts';
@@ -8,7 +8,7 @@ import { TrackerDatabase } from '../../shared/db/database.ts';
 import { getJstIsoString } from '../../shared/helpers/time_helper.ts';
 import { logger } from '../../shared/logger.ts';
 import { TrackerService } from '../../worker/services/tracker_service.ts';
-import type { ApiResponse, TrackerRecord } from '../../shared/types.ts';
+import type { ApiResponse } from '../../shared/types.ts';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -145,7 +145,7 @@ export class TrackerHttpServer {
     // API: /api/latest
     if (pathname === '/api/latest' && req.method === 'GET') {
       try {
-        const latest = this.db.getLatest();
+        const latest = await this.db.getLatest();
         return this.jsonResponse({
           success: true,
           data: latest,
@@ -165,7 +165,7 @@ export class TrackerHttpServer {
         const rawOrder = searchParams.get('order')?.toLowerCase();
         const order: 'asc' | 'desc' = rawOrder === 'desc' ? 'desc' : 'asc';
 
-        const history = this.db.getHistory(limit, order);
+        const history = await this.db.getHistory(limit, order);
         return this.jsonResponse({
           success: true,
           count: history.length,

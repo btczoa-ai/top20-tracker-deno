@@ -1,7 +1,7 @@
 /**
- * Top10 Volume Tracker: WebUI Service Main Entrypoint
+ * Top20 Volume Tracker: WebUI Service Main Entrypoint
  * Standalone HTTP server daemon responsible for serving the Web UI dashboard
- * and providing REST API endpoints to read volume history from SQLite.
+ * and providing REST API endpoints to read volume history from Deno KV.
  */
 
 import '@std/dotenv/load';
@@ -20,16 +20,17 @@ async function main(): Promise<void> {
   }
 
   logger.info('========================================================');
-  logger.info('   Top10 Volume Tracker [WebUI Service] - Starting');
+  logger.info('   Top20 Volume Tracker [WebUI Service] - Starting');
   logger.info('========================================================');
 
   const port = Number(Deno.env.get('PORT') ?? DEFAULT_PORT);
   const dbPath = Deno.env.get('DB_PATH') ?? DEFAULT_DB_PATH;
 
-  logger.info(`WebUI Config: Port=${port}, DB=${dbPath}`);
+  logger.info(`WebUI Config: Port=${port}, Deno KV DB=${dbPath}`);
 
-  // 1. Initialize SQLite Database (WAL mode enables safe concurrent read)
+  // 1. Initialize Deno KV Database
   const db = new TrackerDatabase(dbPath);
+  await db.init();
 
   // 2. Start HTTP Server in standalone WebUI mode
   const server = new TrackerHttpServer(port, db);

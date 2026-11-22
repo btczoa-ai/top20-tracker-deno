@@ -1,23 +1,30 @@
 import { assertEquals, assertGreater } from '@std/assert';
-import { HyperliquidAdapter } from '../src/worker/adapters/hyperliquid.ts';
+import { MarketDataAdapter } from '../src/worker/adapters/market_data.ts';
 
-Deno.test('HyperliquidAdapter: fetchTop10Aggregation against live API', async () => {
-  const adapter = new HyperliquidAdapter();
-  const agg = await adapter.fetchTop10Aggregation(10);
+Deno.test('MarketDataAdapter: fetchTop20HourlyAggregation produces valid 24h volume data', async () => {
+  const adapter = new MarketDataAdapter();
+  const agg = await adapter.fetchTop20HourlyAggregation(20);
 
-  assertEquals(agg.top10Count, 10);
-  assertGreater(agg.totalVolume, 0);
-  assertGreater(agg.averageVolume, 0);
-  assertEquals(agg.upCount + agg.downCount <= 10, true);
-  assertEquals(agg.topCoins.length, 10);
-  // 上昇/下落別の取引量合計は全体の取引量を超えない
-  assertEquals(agg.upVolume + agg.downVolume <= agg.totalVolume + 1, true);
-  // 全銘柄分の上昇/下落別取引量は TOP10 分以上になる
-  assertEquals(agg.allUpVolume >= agg.upVolume, true);
-  assertEquals(agg.allDownVolume >= agg.downVolume, true);
+  assertEquals(agg.topCount, 20);
+  assertGreater(agg.totalVolume24h, 0);
+  assertGreater(agg.averageVolume24h, 0);
+  assertEquals(agg.coins.length, 20);
+  assertEquals(agg.upCount + agg.downCount <= 20, true);
 
-  // Validate descending order of top coins by volume
-  for (let i = 0; i < agg.topCoins.length - 1; i++) {
-    assertEquals(agg.topCoins[i].volume >= agg.topCoins[i + 1].volume, true);
+  // Validate presence of symbols and volume24h
+  for (const coin of agg.coins) {
+    assertEquals(typeof coin.name, 'string');
+    assertEquals(typeof coin.symbol, 'string');
+    assertGreater(coin.volume24h, 0);
+    assertGreater(coin.marketCap, 0);
   }
+});
+
+Deno.test('MarketDataAdapter: generateSimulatedAggregation works offline with 24h volume', () => {
+  const adapter = new MarketDataAdapter();
+  const agg = adapter.generateSimulatedAggregation(20);
+
+  assertEquals(agg.topCount, 20);
+  assertGreater(agg.totalVolume24h, 0);
+  assertEquals(agg.coins.length, 20);
 });

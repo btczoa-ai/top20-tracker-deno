@@ -1,15 +1,13 @@
 /**
- * Top10 Volume Tracker: Worker Service Main Entrypoint
+ * Top20 Volume Tracker: Worker Service Main Entrypoint
  * Standalone daemon process responsible for periodic market data fetching,
- * ranking TOP 10 currencies by 24h volume, and persisting aggregations to SQLite.
+ * ranking TOP 20 currencies by market cap, calculating 1-hour trading volume,
+ * and persisting aggregations to Deno KV.
  */
 
 import '@std/dotenv/load';
-import { HyperliquidAdapter } from './adapters/hyperliquid.ts';
-import {
-  DEFAULT_DB_PATH,
-  HYPERLIQUID_API_URL,
-} from '../shared/constants.ts';
+import { MarketDataAdapter } from './adapters/market_data.ts';
+import { DEFAULT_DB_PATH } from '../shared/constants.ts';
 import { TrackerDatabase } from '../shared/db/database.ts';
 import { type LogLevel, logger, setLogLevel } from '../shared/logger.ts';
 import { TrackerService } from './services/tracker_service.ts';
@@ -21,23 +19,23 @@ async function main(): Promise<void> {
   }
 
   logger.info('========================================================');
-  logger.info('   Top10 Volume Tracker [Worker Service] - Starting');
+  logger.info('   Top20 Volume Tracker [Worker Service] - Starting');
   logger.info('========================================================');
 
   const dbPath = Deno.env.get('DB_PATH') ?? DEFAULT_DB_PATH;
-  const apiUrl = Deno.env.get('HYPERLIQUID_API_URL') ?? HYPERLIQUID_API_URL;
 
-  logger.info(`Worker Config: DB=${dbPath}, API=${apiUrl}`);
+  logger.info(`Worker Config: Deno KV DB=${dbPath}`);
 
-  // 1. Initialize SQLite Database (WAL mode enabled)
+  // 1. Initialize Deno KV Database
   const db = new TrackerDatabase(dbPath);
+  await db.init();
 
-  // 2. Initialize Hyperliquid Adapter
-  const adapter = new HyperliquidAdapter(apiUrl);
+  // 2. Initialize Market Data Adapter
+  const adapter = new MarketDataAdapter();
 
   // 3. Initialize Tracker Service & start Scheduler
   const trackerService = new TrackerService(db, adapter);
-  trackerService.startScheduler();
+  await trackerService.startScheduler();
 
   logger.info('✓ Worker daemon is actively monitoring. Press Ctrl+C to terminate.');
 

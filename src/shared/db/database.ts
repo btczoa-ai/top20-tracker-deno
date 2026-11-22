@@ -1,127 +1,75 @@
 /**
- * Top10 Volume Tracker: Database Layer (SQLite)
- * Handles persistence for aggregated 24h volume records.
- * Note: Per project requirements, coin lists are not stored in the database.
+ * Top20 Volume Tracker: Database Layer (Deno KV)
+ * Stores hourly snapshots of past 24-hour trading volume aggregations of top 20 cryptocurrencies.
  */
 
-import { Database } from '@db/sqlite';
-import { DB_TABLE_RECORDS, DEFAULT_DB_PATH } from '../constants.ts';
+import { DEFAULT_DB_PATH } from '../constants.ts';
 import { logger } from '../logger.ts';
 import type { NewTrackerRecord, TrackerRecord } from '../types.ts';
 
 export class TrackerDatabase {
-  private db: Database;
-  private dbPath: string;
+  private kvPath: string;
+  private kv: Deno.Kv | null = null;
+  private tempFileToDelete: string | null = null;
 
-  constructor(dbPath: string = DEFAULT_DB_PATH) {
-    this.dbPath = dbPath;
-    this.ensureDirectoryExists(dbPath);
-    // int64: true ensures 64-bit Unix millisecond timestamps are not truncated to 32-bit signed ints
-    this.db = new Database(dbPath, { int64: true });
-    this.init();
+  constructor(kvPath: string = DEFAULT_DB_PATH) {
+    this.kvPath = kvPath;
   }
 
   /**
-   * Ensure parent directory of database file exists
+   * Initializes Deno KV database
    */
-  private ensureDirectoryExists(filePath: string): void {
-    const lastSlash = filePath.lastIndexOf('/');
-    if (lastSlash > 0) {
-      const dir = filePath.slice(0, lastSlash);
-      try {
-        Deno.mkdirSync(dir, { recursive: true });
-      } catch (err) {
-        if (!(err instanceof Deno.errors.AlreadyExists)) {
-          logger.error(`Failed to create database directory ${dir}:`, err);
-        }
-      }
+  public async init(): Promise<void> {
+    if (this.kv) return;
+    logger.info(`Initializing Deno KV database at: ${this.kvPath}`);
+
+    // If path is :memory:, create an isolated temporary SQLite file to ensure fresh DB
+    if (this.kvPath === ':memory:') {
+      const tempPath = await Deno.makeTempFile({ prefix: 'deno_kv_test_', suffix: '.db' });
+      this.tempFileToDelete = tempPath;
+      this.kv = await Deno.openKv(tempPath);
+    } else {
+      this.kv = await Deno.openKv(this.kvPath);
     }
   }
 
   /**
-   * Initializes database schema and indexes
+   * Get safe KV instance, auto-initializing if needed
    */
-  public init(): void {
-    logger.info(`Initializing SQLite database at: ${this.dbPath}`);
-    if (this.dbPath !== ':memory:') {
-      this.db.exec('PRAGMA journal_mode = WAL;');
-      this.db.exec('PRAGMA busy_timeout = 5000;');
+  private async getKv(): Promise<Deno.Kv> {
+    if (!this.kv) {
+      await this.init();
     }
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS ${DB_TABLE_RECORDS} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp INTEGER NOT NULL,
-        iso_time TEXT NOT NULL,
-        total_volume REAL NOT NULL,
-        average_volume REAL NOT NULL,
-        up_count INTEGER NOT NULL,
-        down_count INTEGER NOT NULL,
-        up_volume REAL NOT NULL DEFAULT 0,
-        down_volume REAL NOT NULL DEFAULT 0,
-        all_up_volume REAL NOT NULL DEFAULT 0,
-        all_down_volume REAL NOT NULL DEFAULT 0
-      );
-      CREATE INDEX IF NOT EXISTS idx_records_timestamp ON ${DB_TABLE_RECORDS} (timestamp);
-    `);
-    this.migrateVolumeSplitColumns();
+    return this.kv!;
   }
 
   /**
-   * 既存DBに上昇/下落別取引量カラム (TOP10分・全銘柄分) が無い場合に追加する (既存行は 0)
+   * Inserts an aggregated volume record into Deno KV
    */
-  private migrateVolumeSplitColumns(): void {
-    const columns = this.db
-      .prepare(`PRAGMA table_info(${DB_TABLE_RECORDS})`)
-      .all<{ name: string }>()
-      .map((col) => col.name);
-    for (const name of ['up_volume', 'down_volume', 'all_up_volume', 'all_down_volume']) {
-      if (!columns.includes(name)) {
-        this.db.exec(`ALTER TABLE ${DB_TABLE_RECORDS} ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
-        logger.info(`カラム ${name} を追加しました`);
-      }
-    }
-  }
+  public async insertRecord(record: NewTrackerRecord): Promise<TrackerRecord> {
+    const kv = await this.getKv();
 
-  /**
-   * Inserts an aggregated volume record into the database
-   */
-  public insertRecord(record: NewTrackerRecord): TrackerRecord {
-    const stmt = this.db.prepare(`
-      INSERT INTO ${DB_TABLE_RECORDS} (
-        timestamp,
-        iso_time,
-        total_volume,
-        average_volume,
-        up_count,
-        down_count,
-        up_volume,
-        down_volume,
-        all_up_volume,
-        all_down_volume
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      record.timestamp,
-      record.iso_time,
-      record.total_volume,
-      record.average_volume,
-      record.up_count,
-      record.down_count,
-      record.up_volume,
-      record.down_volume,
-      record.all_up_volume,
-      record.all_down_volume,
-    );
-
-    const insertedId = Number(this.db.lastInsertRowId);
-
+    // Use timestamp as sequence ID
+    const insertedId = record.timestamp;
     const createdRecord: TrackerRecord = {
       id: insertedId,
       ...record,
     };
 
-    logger.debug(`Record inserted with ID ${insertedId}: [${record.iso_time}] Total Volume: $${record.total_volume.toLocaleString()}`);
+    // Store under ["records", timestamp] and update ["latest"]
+    const atomic = kv.atomic();
+    atomic.set(['records', record.timestamp], createdRecord);
+    atomic.set(['latest'], createdRecord);
+
+    const commitResult = await atomic.commit();
+    if (!commitResult.ok) {
+      throw new Error(`Failed to commit record to Deno KV for timestamp ${record.timestamp}`);
+    }
+
+    logger.debug(
+      `Record saved to KV: ID=${insertedId} [${record.iso_time}] TOP20 24h Total Volume: $${record.total_volume_24h.toLocaleString()}`,
+    );
+
     return createdRecord;
   }
 
@@ -130,70 +78,86 @@ export class TrackerDatabase {
    * @param limit Maximum number of records to return (default: 100)
    * @param order 'asc' (oldest to newest) or 'desc' (newest to oldest)
    */
-  public getHistory(limit: number = 100, order: 'asc' | 'desc' = 'asc'): TrackerRecord[] {
-    const sortOrder = order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-    const stmt = this.db.prepare(`
-      SELECT
-        id,
-        timestamp,
-        iso_time,
-        total_volume,
-        average_volume,
-        up_count,
-        down_count,
-        up_volume,
-        down_volume,
-        all_up_volume,
-        all_down_volume
-      FROM ${DB_TABLE_RECORDS}
-      ORDER BY timestamp ${sortOrder}
-      LIMIT ?
-    `);
+  public async getHistory(limit: number = 100, order: 'asc' | 'desc' = 'asc'): Promise<TrackerRecord[]> {
+    const kv = await this.getKv();
+    const reverse = order.toLowerCase() === 'desc';
 
-    const rows = stmt.all<TrackerRecord>(limit);
-    return rows;
+    const records: TrackerRecord[] = [];
+    const iter = kv.list<TrackerRecord>({ prefix: ['records'] }, { reverse, limit });
+
+    for await (const entry of iter) {
+      if (entry.value) {
+        // Ensure total_volume_24h fallback if older records exist
+        const rec = entry.value;
+        if (rec.total_volume_24h === undefined && rec.total_volume_1h !== undefined) {
+          rec.total_volume_24h = rec.total_volume_1h;
+          rec.average_volume_24h = rec.average_volume_1h ?? 0;
+        }
+        records.push(rec);
+      }
+    }
+
+    return records;
   }
 
   /**
    * Retrieves the most recent record
    */
-  public getLatest(): TrackerRecord | null {
-    const stmt = this.db.prepare(`
-      SELECT
-        id,
-        timestamp,
-        iso_time,
-        total_volume,
-        average_volume,
-        up_count,
-        down_count,
-        up_volume,
-        down_volume,
-        all_up_volume,
-        all_down_volume
-      FROM ${DB_TABLE_RECORDS}
-      ORDER BY timestamp DESC
-      LIMIT 1
-    `);
+  public async getLatest(): Promise<TrackerRecord | null> {
+    const kv = await this.getKv();
+    const latestEntry = await kv.get<TrackerRecord>(['latest']);
+    if (latestEntry.value) {
+      const rec = latestEntry.value;
+      if (rec.total_volume_24h === undefined && rec.total_volume_1h !== undefined) {
+        rec.total_volume_24h = rec.total_volume_1h;
+        rec.average_volume_24h = rec.average_volume_1h ?? 0;
+      }
+      return rec;
+    }
 
-    const row = stmt.get<TrackerRecord>();
-    return row ?? null;
+    // Fallback: list 1 in reverse if ["latest"] was not set
+    const iter = kv.list<TrackerRecord>({ prefix: ['records'] }, { reverse: true, limit: 1 });
+    for await (const entry of iter) {
+      const rec = entry.value;
+      if (rec.total_volume_24h === undefined && rec.total_volume_1h !== undefined) {
+        rec.total_volume_24h = rec.total_volume_1h;
+        rec.average_volume_24h = rec.average_volume_1h ?? 0;
+      }
+      return rec;
+    }
+
+    return null;
   }
 
   /**
    * Returns total count of stored records
    */
-  public getRecordCount(): number {
-    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${DB_TABLE_RECORDS}`);
-    const result = stmt.get<{ count: number }>();
-    return result ? Number(result.count) : 0;
+  public async getRecordCount(): Promise<number> {
+    const kv = await this.getKv();
+    let count = 0;
+    const iter = kv.list({ prefix: ['records'] });
+    for await (const _entry of iter) {
+      count++;
+    }
+    return count;
   }
 
   /**
-   * Closes database connection cleanly
+   * Closes database connection cleanly and removes any temporary files
    */
   public close(): void {
-    logger.info('Closing SQLite database connection.');
-    this.db.close();
+    if (this.kv) {
+      logger.info('Closing Deno KV database connection.');
+      this.kv.close();
+      this.kv = null;
+    }
+    if (this.tempFileToDelete) {
+      try {
+        Deno.removeSync(this.tempFileToDelete);
+      } catch {
+        // ignore cleanup error
+      }
+      this.tempFileToDelete = null;
+    }
   }
 }

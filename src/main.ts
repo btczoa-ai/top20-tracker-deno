@@ -1,14 +1,13 @@
 /**
- * Top10 Volume Tracker: Main Entrypoint
- * Coordinates database initialization, scheduler launch, and HTTP server startup.
+ * Top20 Volume Tracker: Main Entrypoint
+ * Coordinates KV database initialization, scheduler launch, and HTTP server startup.
  */
 
 import '@std/dotenv/load';
-import { HyperliquidAdapter } from './worker/adapters/hyperliquid.ts';
+import { MarketDataAdapter } from './worker/adapters/market_data.ts';
 import {
   DEFAULT_DB_PATH,
   DEFAULT_PORT,
-  HYPERLIQUID_API_URL,
 } from './shared/constants.ts';
 import { TrackerDatabase } from './shared/db/database.ts';
 import { type LogLevel, logger, setLogLevel } from './shared/logger.ts';
@@ -22,24 +21,24 @@ async function main(): Promise<void> {
   }
 
   logger.info('========================================================');
-  logger.info('   Top10 Volume Tracker (Deno) - Starting Up');
+  logger.info('   Top20 Volume Tracker (Deno) - Starting Up');
   logger.info('========================================================');
 
   const port = Number(Deno.env.get('PORT') ?? DEFAULT_PORT);
   const dbPath = Deno.env.get('DB_PATH') ?? DEFAULT_DB_PATH;
-  const apiUrl = Deno.env.get('HYPERLIQUID_API_URL') ?? HYPERLIQUID_API_URL;
 
-  logger.info(`Configuration: Port=${port}, DB=${dbPath}, API=${apiUrl}`);
+  logger.info(`Configuration: Port=${port}, Deno KV DB=${dbPath}`);
 
-  // 1. Initialize SQLite Database
+  // 1. Initialize Deno KV Database
   const db = new TrackerDatabase(dbPath);
+  await db.init();
 
-  // 2. Initialize Hyperliquid Adapter
-  const adapter = new HyperliquidAdapter(apiUrl);
+  // 2. Initialize Market Data Adapter
+  const adapter = new MarketDataAdapter();
 
   // 3. Initialize Tracker Service & start Scheduler
   const trackerService = new TrackerService(db, adapter);
-  trackerService.startScheduler();
+  await trackerService.startScheduler();
 
   // 4. Start HTTP Server
   const server = new TrackerHttpServer(port, trackerService, db);

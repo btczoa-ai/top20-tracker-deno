@@ -17,8 +17,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.webui
-    image: nanbingjun/top10-volume-tracker-webui:latest
-    container_name: top10-volume-tracker-webui
+    image: nanbingjun/top20-tracker-webui:latest
+    container_name: top20-tracker-webui
     restart: unless-stopped
     ports:
       - "8003:8003"

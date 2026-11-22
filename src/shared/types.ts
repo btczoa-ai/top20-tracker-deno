@@ -1,92 +1,57 @@
 /**
- * Top10 Volume Tracker: Core Types and Interfaces
+ * Top20 Volume Tracker: Core Types and Interfaces
  */
 
 /**
- * SQLite Database Record schema for `records` table
- * Note: Per project requirements, coin lists are not stored in the database.
+ * Top coin snapshot item in the hourly aggregation
  */
-export interface TrackerRecord {
-  id: number;
-  timestamp: number;      // Unix timestamp in milliseconds
-  iso_time: string;       // Formatted ISO string (JST / UTC)
-  total_volume: number;   // Sum of 24h notional volume across TOP 10 coins (USD)
-  average_volume: number; // Average 24h volume across TOP 10 coins (USD)
-  up_count: number;       // Number of coins where markPx > prevDayPx
-  down_count: number;     // Number of coins where markPx < prevDayPx
-  up_volume: number;      // 上昇銘柄の24h取引量合計 (USD)
-  down_volume: number;    // 下落銘柄の24h取引量合計 (USD)
-  all_up_volume: number;   // 全銘柄 (TOP10に限らない) の上昇銘柄の24h取引量合計 (USD)
-  all_down_volume: number; // 全銘柄 (TOP10に限らない) の下落銘柄の24h取引量合計 (USD)
+export interface TopCoinInfo {
+  rank: number;
+  name: string;
+  symbol: string;
+  marketCap: number;
+  volume24h: number;         // 過去24時間の取引量 (USD)
+  price: number;
+  change1hPercent?: number;  // 1時間 価格変動率 (%)
+  change24hPercent?: number; // 24時間 価格変動率 (%)
+  isUp?: boolean;
+  isDown?: boolean;
 }
 
 /**
- * Input payload for inserting a new tracker record into the database
+ * KV Database Record schema for hourly volume tracking
+ */
+export interface TrackerRecord {
+  id: number;
+  timestamp: number;         // Unix timestamp in milliseconds (aligned to hourly bucket)
+  iso_time: string;          // Formatted ISO string (JST / UTC)
+  total_volume_24h: number;  // 時価総額TOP20通貨の過去24時間取引量合計 (USD)
+  average_volume_24h: number;// 時価総額TOP20通貨の過去24時間取引量平均 (USD)
+  total_volume_1h?: number;  // 後方互換用エイリアス
+  average_volume_1h?: number;// 後方互換用エイリアス
+  top_count: number;         // 集計対象通貨数 (通常 20)
+  up_count?: number;         // 1時間で上昇した通貨数
+  down_count?: number;       // 1時間で下落した通貨数
+  coins?: TopCoinInfo[];     // 各通貨の内訳スナップショット
+}
+
+/**
+ * Input payload for inserting a new tracker record into KV
  */
 export type NewTrackerRecord = Omit<TrackerRecord, 'id'>;
 
 /**
- * Top 10 coin snapshot item calculated during aggregation
+ * Aggregation result returned by market data adapter
  */
-export interface TopCoinInfo {
-  name: string;
-  volume: number;
-  markPx: number;
-  prevDayPx: number;
-  changePercent: number;
-  isUp: boolean;
-  isDown: boolean;
-}
-
-/**
- * Aggregation result returned by Hyperliquid adapter
- */
-export interface Top10Aggregation {
-  totalVolume: number;
-  averageVolume: number;
+export interface Top20Aggregation {
+  timestamp: number;
+  isoTime: string;
+  totalVolume24h: number;
+  averageVolume24h: number;
+  topCount: number;
   upCount: number;
   downCount: number;
-  upVolume: number;       // 上昇銘柄の24h取引量合計 (USD)
-  downVolume: number;     // 下落銘柄の24h取引量合計 (USD)
-  allUpVolume: number;    // 全銘柄の上昇銘柄の24h取引量合計 (USD)
-  allDownVolume: number;  // 全銘柄の下落銘柄の24h取引量合計 (USD)
-  top10Count: number;
-  topCoins: TopCoinInfo[];
-  timestamp: number;
-}
-
-/**
- * Hyperliquid Meta Universe element
- */
-export interface HyperliquidUniverseItem {
-  name: string;
-  szDecimals: number;
-  maxLeverage?: number;
-  marginTableId?: number;
-  isDelisted?: boolean;
-}
-
-/**
- * Hyperliquid Meta response
- */
-export interface HyperliquidMeta {
-  universe: HyperliquidUniverseItem[];
-}
-
-/**
- * Hyperliquid Asset Context element
- */
-export interface HyperliquidAssetCtx {
-  funding?: string;
-  openInterest?: string;
-  prevDayPx?: string;
-  dayNtlVlm?: string;
-  premium?: string;
-  oraclePx?: string;
-  markPx?: string;
-  midPx?: string;
-  impactPxs?: string[];
-  dayBaseVlm?: string;
+  coins: TopCoinInfo[];
 }
 
 /**

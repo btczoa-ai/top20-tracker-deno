@@ -1,98 +1,70 @@
-import { assertEquals, assertNotEquals } from '@std/assert';
-import { Database } from '@db/sqlite';
+import { assertEquals, assertGreater } from '@std/assert';
 import { TrackerDatabase } from '../src/shared/db/database.ts';
 
-Deno.test('TrackerDatabase: insert, getLatest, getHistory, getRecordCount', () => {
+Deno.test('TrackerDatabase: Deno KV insert, getLatest, getHistory, getRecordCount', async () => {
   const db = new TrackerDatabase(':memory:');
+  await db.init();
 
   try {
-    assertEquals(db.getRecordCount(), 0);
-    assertEquals(db.getLatest(), null);
-    assertEquals(db.getHistory().length, 0);
+    // 1. Initially empty
+    const initialCount = await db.getRecordCount();
+    assertEquals(initialCount, 0);
 
-    const record1 = db.insertRecord({
-      timestamp: 1729000000000,
-      iso_time: '2026-10-19T07:00:00.000+09:00',
-      total_volume: 5000000000,
-      average_volume: 500000000,
-      up_count: 7,
-      down_count: 3,
-      up_volume: 3500000000,
-      down_volume: 1500000000,
-      all_up_volume: 9000000000,
-      all_down_volume: 3000000000,
-    });
+    const initialLatest = await db.getLatest();
+    assertEquals(initialLatest, null);
 
-    assertNotEquals(record1.id, 0);
-    assertEquals(db.getRecordCount(), 1);
-
-    const latest1 = db.getLatest();
-    assertEquals(latest1?.timestamp, 1729000000000);
-    assertEquals(latest1?.total_volume, 5000000000);
-    assertEquals(latest1?.up_count, 7);
-    assertEquals(latest1?.up_volume, 3500000000);
-    assertEquals(latest1?.down_volume, 1500000000);
-    assertEquals(latest1?.all_up_volume, 9000000000);
-    assertEquals(latest1?.all_down_volume, 3000000000);
-
-    const record2 = db.insertRecord({
-      timestamp: 1729003600000,
-      iso_time: '2026-10-19T08:00:00.000+09:00',
-      total_volume: 6000000000,
-      average_volume: 600000000,
-      up_count: 4,
+    // 2. Insert record
+    const timestamp1 = 1700000000000;
+    const record1 = await db.insertRecord({
+      timestamp: timestamp1,
+      iso_time: '2026-11-13T16:00:00+09:00',
+      total_volume_24h: 120_000_000_000,
+      average_volume_24h: 6_000_000_000,
+      total_volume_1h: 120_000_000_000,
+      average_volume_1h: 6_000_000_000,
+      top_count: 20,
+      up_count: 14,
       down_count: 6,
-      up_volume: 2000000000,
-      down_volume: 4000000000,
-      all_up_volume: 5000000000,
-      all_down_volume: 8000000000,
     });
 
-    assertEquals(db.getRecordCount(), 2);
+    assertEquals(record1.id, timestamp1);
+    assertEquals(record1.total_volume_24h, 120_000_000_000);
 
-    const latest2 = db.getLatest();
-    assertEquals(latest2?.id, record2.id);
-    assertEquals(latest2?.timestamp, 1729003600000);
+    // 3. Insert second record
+    const timestamp2 = 1700003600000;
+    await db.insertRecord({
+      timestamp: timestamp2,
+      iso_time: '2026-11-13T17:00:00+09:00',
+      total_volume_24h: 125_000_000_000,
+      average_volume_24h: 6_250_000_000,
+      total_volume_1h: 125_000_000_000,
+      average_volume_1h: 6_250_000_000,
+      top_count: 20,
+      up_count: 11,
+      down_count: 9,
+    });
 
-    const ascHistory = db.getHistory(10, 'asc');
-    assertEquals(ascHistory.length, 2);
-    assertEquals(ascHistory[0].timestamp, 1729000000000);
-    assertEquals(ascHistory[1].timestamp, 1729003600000);
+    // 4. Check record count
+    const count = await db.getRecordCount();
+    assertEquals(count, 2);
 
-    const descHistory = db.getHistory(10, 'desc');
-    assertEquals(descHistory.length, 2);
-    assertEquals(descHistory[0].timestamp, 1729003600000);
-    assertEquals(descHistory[0].total_volume, 6000000000);
+    // 5. Check latest
+    const latest = await db.getLatest();
+    assertEquals(latest?.timestamp, timestamp2);
+    assertEquals(latest?.total_volume_24h, 125_000_000_000);
+
+    // 6. Check history ASC
+    const historyAsc = await db.getHistory(10, 'asc');
+    assertEquals(historyAsc.length, 2);
+    assertEquals(historyAsc[0].timestamp, timestamp1);
+    assertEquals(historyAsc[1].timestamp, timestamp2);
+
+    // 7. Check history DESC
+    const historyDesc = await db.getHistory(10, 'desc');
+    assertEquals(historyDesc.length, 2);
+    assertEquals(historyDesc[0].timestamp, timestamp2);
+    assertEquals(historyDesc[1].timestamp, timestamp1);
   } finally {
     db.close();
-  }
-});
-
-Deno.test('TrackerDatabase: 旧スキーマのDBに上昇/下落取引量カラム (TOP10分・全銘柄分) を追加するマイグレーション', () => {
-  const path = Deno.makeTempFileSync({ suffix: '.db' });
-  try {
-    // 旧スキーマ (up_volume / down_volume 無し) を再現
-    const legacy = new Database(path);
-    legacy.exec(`CREATE TABLE records (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, iso_time TEXT NOT NULL,
-      total_volume REAL NOT NULL, average_volume REAL NOT NULL,
-      up_count INTEGER NOT NULL, down_count INTEGER NOT NULL
-    )`);
-    legacy.exec(`INSERT INTO records (timestamp, iso_time, total_volume, average_volume, up_count, down_count)
-      VALUES (1729000000000, 'x', 100, 10, 5, 5)`);
-    legacy.close();
-
-    const db = new TrackerDatabase(path);
-    try {
-      const latest = db.getLatest();
-      assertEquals(latest?.up_volume, 0);
-      assertEquals(latest?.down_volume, 0);
-      assertEquals(latest?.all_up_volume, 0);
-      assertEquals(latest?.all_down_volume, 0);
-    } finally {
-      db.close();
-    }
-  } finally {
-    Deno.removeSync(path);
   }
 });
